@@ -1,6 +1,7 @@
-# -#include <opencv2/opencv.hpp>
+#include <opencv2/opencv.hpp>
 #include <iostream>
 #include <vector>
+#include <cmath>
 
 using namespace cv;
 using namespace std;
@@ -10,10 +11,15 @@ int lowH1 = 0, highH1 = 10;
 int lowH2 = 160, highH2 = 180;
 int lowS = 100, highS = 255;
 int lowV = 50, highV = 255;
-bool parametersConfirmed = false;
+
+// 灯条结构体
+struct LightBar {
+    RotatedRect rect;
+    vector<Point> contour;
+};
 
 // 图像处理函数
-Mat processImage(Mat& img) {
+void processImage(Mat& img) {
     // 1. 颜色空间转换 (BGR转HSV)
     Mat hsv;
     cvtColor(img, hsv, COLOR_BGR2HSV);
@@ -39,9 +45,8 @@ Mat processImage(Mat& img) {
     vector<vector<Point>> contours;
     findContours(mask, contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
     
-    // 6. 筛选装甲板轮廓
-    vector<RotatedRect> armorPlates;
-    
+    // 6. 筛选灯条
+    vector<LightBar> lightBars;
     for (size_t i = 0; i < contours.size(); i++) {
         double area = contourArea(contours[i]);
         if (area < 100) continue;
@@ -53,11 +58,61 @@ Mat processImage(Mat& img) {
         
         float aspectRatio = max(width, height) / min(width, height);
         if (aspectRatio > 1.2 && aspectRatio < 6.0) {
-            armorPlates.push_back(rect);
+            LightBar lightBar;
+            lightBar.rect = rect;
+            lightBar.contour = contours[i];
+            lightBars.push_back(lightBar);
         }
     }
     
-    // 7. 绘制结果
+    // 7. 配对灯条形成装甲板
+    vector<RotatedRect> armorPlates;
+    vector<bool> used(lightBars.size(), false);
+    
+    for (size_t i = 0; i < lightBars.size(); i++) {
+        if (used[i]) continue;
+        
+        for (size_t j = i + 1; j < lightBars.size(); j++) {
+            if (used[j]) continue;
+            
+            const RotatedRect& rect1 = lightBars[i].rect;
+            const RotatedRect& rect2 = lightBars[j].rect;
+            
+            // 计算灯条中心距离
+            float distance = norm(rect1.center - rect2.center);
+            
+            // 计算灯条角度差（考虑角度周期性）
+            float angleDiff = abs(rect1.angle - rect2.angle);
+            if (angleDiff > 90.0) angleDiff = 180.0 - angleDiff;
+            
+            // 计算高度差（y坐标差）
+            float heightDiff = abs(rect1.center.y - rect2.center.y);
+            
+            // 配对条件（可根据实际情况调整）
+            float maxHeight = max(rect1.size.height, rect2.size.height);
+            if (distance > maxHeight * 0.5 && 
+                distance < maxHeight * 5.0 &&
+                angleDiff < 15.0 && 
+                heightDiff < maxHeight * 0.5) {
+                
+                // 合并两个灯条的轮廓点
+                vector<Point> mergedPoints = lightBars[i].contour;
+                mergedPoints.insert(mergedPoints.end(), 
+                                   lightBars[j].contour.begin(), 
+                                   lightBars[j].contour.end());
+                
+                // 计算合并轮廓的最小外接矩形
+                if (!mergedPoints.empty()) {
+                    armorPlates.push_back(minAreaRect(mergedPoints));
+                    used[i] = true;
+                    used[j] = true;
+                    break; // 找到配对后跳出内层循环
+                }
+            }
+        }
+    }
+    
+    // 8. 绘制结果 - 只绘制装甲板
     Mat result = img.clone();
     for (const auto& rect : armorPlates) {
         Point2f vertices[4];
@@ -70,32 +125,26 @@ Mat processImage(Mat& img) {
         circle(result, rect.center, 5, Scalar(0, 0, 255), -1);
     }
     
-    // 8. 显示处理过程
-    if (!parametersConfirmed) {
-        imshow("红色掩膜1", mask1);
-        imshow("红色掩膜2", mask2);
-        imshow("合并掩膜", mask);
-    }
+    // 9. 显示处理过程
+    imshow("红色掩膜1", mask1);
+    imshow("红色掩膜2", mask2);
+    imshow("合并掩膜", mask);
+    imshow("最终结果", result);
     
-    // 9. 输出当前参数
-    if (!parametersConfirmed) {
-        cout << "当前红色范围1: H(" << lowH1 << "-" << highH1 << ") "
-             << "S(" << lowS << "-" << highS << ") "
-             << "V(" << lowV << "-" << highV << ")" << endl;
-        cout << "当前红色范围2: H(" << lowH2 << "-" << highH2 << ") "
-             << "S(" << lowS << "-" << highS << ") "
-             << "V(" << lowV << "-" << highV << ")" << endl;
-        cout << "检测到装甲板数量: " << armorPlates.size() << endl;
-    }
-    
-    return result;
+    // 10. 输出当前参数
+    cout << "当前红色范围1: H(" << lowH1 << "-" << highH1 << ") "
+         << "S(" << lowS << "-" << highS << ") "
+         << "V(" << lowV << "-" << highV << ")" << endl;
+    cout << "当前红色范围2: H(" << lowH2 << "-" << highH2 << ") "
+         << "S(" << lowS << "-" << highS << ") "
+         << "V(" << lowV << "-" << highV << ")" << endl;
+    cout << "检测到装甲板数量: " << armorPlates.size() << endl;
 }
 
 // 轨迹条回调函数
 void onTrackbar(int, void* userData) {
     Mat* img = static_cast<Mat*>(userData);
-    Mat result = processImage(*img);
-    imshow("最终结果", result);
+    processImage(*img);
 }
 
 int main() {
@@ -123,22 +172,14 @@ int main() {
     createTrackbar("高V", "参数调整", &highV, 255, onTrackbar, &img);
     
     // 初始处理
-    Mat result = processImage(img);
-    imshow("最终结果", result);
-    
-    // 添加确认按钮提示
-    putText(result, "按 'c' 确认参数并保存结果", Point(10, 30), 
-            FONT_HERSHEY_SIMPLEX, 0.7, Scalar(0, 0, 255), 2);
-    putText(result, "按 ESC 退出程序", Point(10, 60), 
-            FONT_HERSHEY_SIMPLEX, 0.7, Scalar(0, 0, 255), 2);
-    imshow("最终结果", result);
+    processImage(img);
     
     // 等待用户调整
     while (true) {
         int key = waitKey(30);
         if (key == 27) break; // ESC退出
         if (key == 's') {     // 保存当前参数
-            cout << "\n===== 保存的参数 =====" << endl;
+            cout << "保存的参数:" << endl;
             cout << "低红H1: " << lowH1 << endl;
             cout << "高红H1: " << highH1 << endl;
             cout << "低红H2: " << lowH2 << endl;
@@ -147,30 +188,8 @@ int main() {
             cout << "高S: " << highS << endl;
             cout << "低V: " << lowV << endl;
             cout << "高V: " << highV << endl;
-            cout << "======================" << endl;
-        }
-        if (key == 'c') {     // 确认参数
-            parametersConfirmed = true;
-            
-            // 关闭调试窗口
-            destroyWindow("红色掩膜1");
-            destroyWindow("红色掩膜2");
-            destroyWindow("合并掩膜");
-            
-            // 重新处理图像
-            Mat finalResult = processImage(img);
-            
-            // 保存结果
-            imwrite("armor_detection_result.png", finalResult);
-            cout << "结果已保存为 armor_detection_result.png" << endl;
-            
-            // 显示最终结果
-            putText(finalResult, "参数已确认 - 结果已保存", Point(10, 30), 
-                    FONT_HERSHEY_SIMPLEX, 0.7, Scalar(0, 255, 0), 2);
-            imshow("最终结果", finalResult);
         }
     }
     
     return 0;
 }
-自学将任务图片进行图像处理，处理并框出装甲板
