@@ -1,170 +1,161 @@
-装甲板视觉检测系统
- 
- 
-https://img.shields.io/badge/OpenCV-4.5%2B-brightgreen   https://img.shields.io/badge/Platform-Linux%20%7C%20Windows-blue  
- 
- 
- 
-项目概述
- 
- 
-基于OpenCV的红色装甲板实时检测系统，通过HSV颜色空间分割、形态学处理和轮廓分析技术，精准识别战场环境中的装甲目标。支持参数实时调整，适用于RoboMaster等机器人竞赛场景 。
- 
- 
- 
-demo.gif 
-(示例效果图，建议补充实际截图)
- 
- 
- 
-核心功能
- 
- 
- 
-双范围红色检测
- 
- 
-自适应HSV阈值处理（处理0-10°和160-180°红色范围）
- 
-支持实时参数调整（8个滑轨条动态调参）
- 
-灯条智能识别
- 
- 
-面积过滤（>100像素）
- 
-长宽比筛选（1.2-6.0）
- 
-角度差约束（<15°）
- 
-装甲板精准定位
- 
- 
-灯条配对算法（距离/高度/角度多约束）
- 
-融合轮廓最小外接矩形计算
- 
-实时绘制装甲板边界框和中心点
- 
-调试可视化
- 
- 
-分阶段显示掩膜处理结果
- 
-实时控制台参数反馈
- 
-快捷键支持（ESC退出/S保存参数）
- 
- 
- 
-安装指南
- 
- 
- 
-环境依赖
-# Ubuntu
-sudo apt install build-essential libopencv-dev
+# RoboMaster 装甲板检测系统（以红色为例）
 
-# Windows
-vcpkg install opencv[core]
-编译运行
-git clone https://github.com/yourname/armor-detector.git
-cd armor-detector
+这是一个基于 OpenCV 的 C++ 程序，用于检测 RoboMaster 比赛中的装甲板目标。程序通过颜色阈值分割和形态学处理识别红色灯条，然后配对灯条形成装甲板，最后在图像中标记检测结果。
+
+## 功能特点
+
+1. **双通道红色检测**：同时检测 HSV 空间中两种红色范围（0-10° 和 160-180°）
+2. **实时参数调整**：提供轨迹条界面动态调整颜色阈值
+3. **灯条筛选**：基于面积、长宽比等特征筛选有效灯条
+4. **装甲板配对**：根据灯条距离、角度差和高度差配对形成装甲板
+5. **可视化调试**：显示中间处理步骤和最终结果
+
+## 依赖项
+
+- OpenCV 4.x (建议 4.5+)
+- C++17 兼容编译器
+
+## 构建与运行
+
+### Linux 环境
+
+```bash
+# 安装依赖
+sudo apt install build-essential cmake libopencv-dev
+
+# 克隆仓库
+git clone https://github.com/yourusername/robo-detection.git
+cd robo-detection
+
+# 创建构建目录
 mkdir build && cd build
+
+# 配置和构建
 cmake ..
 make -j4
-./armor_detector
-使用说明
- 
- 
- 
-1.图像路径配置
-修改 main.cpp 中的绝对路径：
-string image_path = "/your/path/here.png"; // 替换为实际路径
-2.参数调整界面
-params_ui.png 
-实时调整HSV阈值范围，界面包含：
- 
- 
-低红H1/高红H1：第一红色范围
- 
-低红H2/高红H2：第二红色范围
- 
-低S/高S：饱和度范围
- 
-低V/高V：明度范围
- 
-3.快捷键操作
-按键	功能
-ESC	退出程序
-S	保存当前参数到终端
-算法流程
-graph TD
-    A[图像输入] --> B[HSV空间转换]
-    B --> C{双范围阈值处理}
-    C --> D[掩膜合并]
-    D --> E[形态学优化]
-    E --> F[轮廓检测]
-    F --> G[灯条筛选]
-    G --> H[装甲板配对]
-    H --> I[结果可视化]
-    项目结构
-    ├── CMakeLists.txt
-├── include/
-│   └── armor_detector.h
-├── src/
-│   ├── main.cpp          # 主程序入口
-│   └── image_processor.cpp # 核心处理逻辑
-├── assets/               # 测试图像
-│   └── test_samples/
-├── README.md             # 本文档
-└── LICENSE               # MIT许可证
-常见问题
- 
- 
-Q: 无法加载图像
- 
- 
-检查 image_path 路径权限，确保使用绝对路径
- 
- 
-Q: 灯条检测不稳定
- 
- 
-调整以下参数：
- 
- 
-增大 lowS 减少环境光影响
- 
-降低 highV 避免过曝
- 
-修改形态学核大小（当前7×7）
- 
- 
- 
-Q: 装甲板误匹配
- 
- 
-优化配对条件：
-// 修改距离约束系数
-distance > maxHeight * 0.8 // 原值0.5
 
- 
-未来扩展
- 
- 
- 
-  视频流实时处理
- 
-  深度学习辅助识别
- 
-  三维姿态估计
- 
-  ROS节点封装
- 
- 
- 
-许可证
- 
- 
-本项目采用 MIT License  ，允许商业和非商业用途的自由使用 
+# 运行程序
+./armor_detector
+```
+
+### Windows 环境
+
+1. 安装 Visual Studio 2019 或更高版本
+2. 安装 vcpkg 并配置 OpenCV
+3. 使用 CMake 生成解决方案并构建
+
+## 使用说明
+
+1. **修改图像路径**：
+   在 `main()` 函数中修改图像路径：
+   ```cpp
+   string image_path = "/path/to/your/image.png";
+   ```
+
+2. **参数调整界面**：
+   ![参数调整界面](docs/params_ui.png)
+   - 使用轨迹条调整 HSV 阈值：
+     - 低红H1/高红H1：第一红色范围 (0-30)
+     - 低红H2/高红H2：第二红色范围 (0-180)
+     - 低S/高S：饱和度范围 (0-255)
+     - 低V/高V：亮度范围 (0-255)
+
+3. **快捷键**：
+   - `ESC`：退出程序
+   - `s`：保存当前参数到控制台
+
+4. **输出窗口**：
+   - 红色掩膜1：第一红色范围检测结果
+   - 红色掩膜2：第二红色范围检测结果
+   - 合并掩膜：形态学处理后的最终掩膜
+   - 最终结果：装甲板检测结果（绿色框为装甲板，红点为中心点）
+
+## 代码结构
+
+```
+src/
+├── main.cpp                  # 主程序入口
+include/                      
+├── armor_detector.h          # 装甲板检测类声明
+docs/                         
+├── params_ui.png             # 参数界面截图
+CMakeLists.txt                # CMake 构建配置
+README.md                     # 项目说明
+```
+
+关键函数说明：
+- `processImage()`：核心图像处理流程
+- `onTrackbar()`：轨迹条回调函数
+- `LightBar` 结构体：存储灯条信息
+- 装甲板配对逻辑：基于距离、角度差和高度差
+
+## 参数调整建议
+
+1. **红色范围**：
+   - 典型值：H1(0-10), H2(160-180)
+   - 根据实际灯光条件调整边界值
+
+2. **饱和度(S)**：
+   - 建议范围：100-255
+   - 调高可减少浅色干扰
+
+3. **亮度(V)**：
+   - 建议范围：50-255
+   - 调高可避免暗区误检
+
+4. **形态学操作**：
+   - 内核大小 (7x7) 可根据图像分辨率调整
+   - 分辨率高时可增大内核
+实践可行：（低红H1~25,高红H1~27，低红H2~22,高红H2~180，低S~0,高S~255,低V~63,高V~255）
+（低蓝H~0,高蓝H~180,低S~0,高S~255,低V~39，高V~255）
+## 性能优化
+
+1. 对于视频流处理，可添加帧率计数器：
+   ```cpp
+   auto start = chrono::high_resolution_clock::now();
+   // 处理代码
+   auto end = chrono::high_resolution_clock::now();
+   auto duration = chrono::duration_cast<chrono::milliseconds>(end - start);
+   cout << "处理时间: " << duration.count() << "ms" << endl;
+   ```
+
+2. 开启 OpenCV 优化：
+   ```cpp
+   setUseOptimized(true);
+   setNumThreads(4); // 根据CPU核心数设置
+   ```
+
+## 已知问题与改进方向
+
+1. **当前限制**：
+   - 仅处理静态图像
+   - 未实现目标跟踪
+   - 参数调整需手动进行
+
+2. **改进方向**：
+   ```mermaid
+   graph LR
+   A[当前版本] --> B[视频流处理]
+   A --> C[自动参数校准]
+   A --> D[目标跟踪]
+   B --> E[实时性能优化]
+   C --> F[机器学习辅助]
+   D --> G[预测运动轨迹]
+   ```
+
+3. **待实现功能**：
+   - 装甲板数字识别
+   - 3D位置估计
+   - 多目标跟踪
+   - 自动曝光控制
+
+## 贡献指南
+
+欢迎提交 Issue 和 Pull Request：
+1. 报告问题时请附上测试图像和环境信息
+2. 新功能开发请创建独立分支
+3. 遵循现有代码风格（Google C++ Style）
+
+## 许可协议
+
+本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件。
