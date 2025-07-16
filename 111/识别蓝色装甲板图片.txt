@@ -6,46 +6,46 @@
 using namespace cv;
 using namespace std;
 
-// 全局变量用于实时调整（蓝色范围）
-int lowH = 100, highH = 140;  // 蓝色Hue范围[7](@ref)
-int lowS = 100, highS = 255;  // 饱和度范围
-int lowV = 50, highV = 255;   // 亮度范围
 
-// 图像处理函数
+int lowH = 100, highH = 140;  
+int lowS = 100, highS = 255;  
+int lowV = 50, highV = 255;   
+
+
 void processImage(Mat& img) {
-    // 1. 颜色空间转换 (BGR转HSV)
+    
     Mat hsv;
     cvtColor(img, hsv, COLOR_BGR2HSV);
     
-    // 2. 设置蓝色阈值[7](@ref)
+   
     Scalar lower_blue(lowH, lowS, lowV);
     Scalar upper_blue(highH, highS, highV);
     
-    // 3. 创建蓝色掩膜
+   
     Mat mask;
     inRange(hsv, lower_blue, upper_blue, mask);
     
-    // 4. 形态学操作（优化核尺寸）[3](@ref)
+   
     Mat kernel = getStructuringElement(MORPH_RECT, Size(5, 5));
-    morphologyEx(mask, mask, MORPH_CLOSE, kernel);  // 填充空洞
-    morphologyEx(mask, mask, MORPH_OPEN, kernel);    // 去除噪点
+    morphologyEx(mask, mask, MORPH_CLOSE, kernel);  
+    morphologyEx(mask, mask, MORPH_OPEN, kernel);   
     
-    // 5. 轮廓检测
+   
     vector<vector<Point>> contours;
     findContours(mask, contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
     
-    // 6. 筛选灯条轮廓（优化过滤条件）
+   
     vector<RotatedRect> lightBars;
     for (size_t i = 0; i < contours.size(); i++) {
         double area = contourArea(contours[i]);
-        if (area < 50) continue;  // 降低面积阈值适应小目标
+        if (area < 50) continue;  
 
         RotatedRect rect = minAreaRect(contours[i]);
         float width = rect.size.width;
         float height = rect.size.height;
         float maxDim = max(width, height);
         
-        if (maxDim < 20) continue;  // 过滤过小灯条
+        if (maxDim < 20) continue;  
         
         float aspectRatio = maxDim / min(width, height);
         if (aspectRatio > 1.5 && aspectRatio < 8.0) {
@@ -53,19 +53,19 @@ void processImage(Mat& img) {
         }
     }
 
-    // 7. 灯条分组与配对（核心优化）[1,6](@ref)
+   
     Mat result = img.clone();
     vector<Rect> possibleArmors;
 
     if (lightBars.size() >= 2) {
-        // 按Y坐标分组（解决多排装甲干扰）
+        
         sort(lightBars.begin(), lightBars.end(), [](auto& a, auto& b) {
             return a.center.y < b.center.y;
         });
 
         vector<vector<RotatedRect>> yGroups;
         vector<RotatedRect> currentGroup;
-        float yTolerance = 30;  // 垂直位置容忍度
+        float yTolerance = 30;  
         
         for (size_t i = 0; i < lightBars.size(); i++) {
             if (currentGroup.empty()) {
@@ -82,7 +82,7 @@ void processImage(Mat& img) {
         }
         if (!currentGroup.empty()) yGroups.push_back(currentGroup);
 
-        // 每组内配对灯条
+        
         for (auto& group : yGroups) {
             sort(group.begin(), group.end(), [](auto& a, auto& b) {
                 return a.center.x < b.center.x;
@@ -92,19 +92,19 @@ void processImage(Mat& img) {
                 const RotatedRect& leftBar = group[i];
                 const RotatedRect& rightBar = group[i+1];
                 
-                // 强化配对条件
+                
                 float xGap = rightBar.center.x - leftBar.center.x;
                 float avgHeight = (max(leftBar.size.height, leftBar.size.width) + 
                                   max(rightBar.size.height, rightBar.size.width)) / 2;
                 
-                // 动态间距约束[3](@ref)
+                
                 if (xGap > avgHeight * 4 || xGap < avgHeight * 1.2) continue;
                 
-                // 角度一致性检查[8](@ref)
+                
                 float angleDiff = abs(leftBar.angle - rightBar.angle);
                 if (min(angleDiff, 180 - angleDiff) > 20) continue;
 
-                // 计算装甲板区域
+               
                 Point2f leftPoints[4], rightPoints[4];
                 leftBar.points(leftPoints);
                 rightBar.points(rightPoints);
@@ -116,41 +116,41 @@ void processImage(Mat& img) {
                 }
                 Rect armorRect = boundingRect(allPoints);
                 
-                // 扩展矩形边界（固定像素）
+                
                 armorRect.x -= 5;
                 armorRect.y -= 5;
                 armorRect.width += 10;
                 armorRect.height += 10;
-                armorRect &= Rect(0, 0, img.cols, img.rows);  // 限制图像范围内
+                armorRect &= Rect(0, 0, img.cols, img.rows);  
                 
                 possibleArmors.push_back(armorRect);
             }
         }
     }
 
-    // 8. 绘制最终装甲板（蓝色专用标记）
+   
     if (!possibleArmors.empty()) {
         Rect finalArmor = *max_element(possibleArmors.begin(), possibleArmors.end(),
             [](const Rect& a, const Rect& b) { return a.area() < b.area(); });
         
-        // 绘制蓝色矩形框
-        rectangle(result, finalArmor, Scalar(255, 0, 0), 3);  // BGR格式的蓝色[9](@ref)
+       
+        rectangle(result, finalArmor, Scalar(255, 0, 0), 3); 
         
-        // 添加装甲板标签
+       
         putText(result, "Blue Armor", Point(finalArmor.x, finalArmor.y - 10),
                FONT_HERSHEY_SIMPLEX, 0.7, Scalar(255, 0, 0), 2);
         
-        // 标记装甲板中心（黄色）
+        
         circle(result, Point(finalArmor.x + finalArmor.width/2, 
                             finalArmor.y + finalArmor.height/2), 
-               8, Scalar(0, 255, 255), -1);  // 黄色中心点
+               8, Scalar(0, 255, 255), -1); 
     }
 
-    // 9. 显示处理过程
+   
     imshow("蓝色掩膜", mask);
     imshow("最终结果", result);
     
-    // 10. 输出当前参数
+    
     cout << "当前蓝色范围: H(" << lowH << "-" << highH << ") "
          << "S(" << lowS << "-" << highS << ") "
          << "V(" << lowV << "-" << highV << ")" << endl;
@@ -158,14 +158,14 @@ void processImage(Mat& img) {
     cout << "检测到装甲板: " << (possibleArmors.size() > 0 ? "Yes" : "No") << endl;
 }
 
-// 轨迹条回调函数
+
 void onTrackbar(int, void* userData) {
     Mat* img = static_cast<Mat*>(userData);
     processImage(*img);
 }
 
 int main() {
-    // 1. 使用绝对路径读取图像
+    
     string image_path = "/home/tmoei/C++Projects/gn001/1.png";
     Mat img = imread(image_path);
     
@@ -174,11 +174,11 @@ int main() {
         return -1;
     }
     
-    // 创建调试窗口
+   
     namedWindow("参数调整", WINDOW_NORMAL);
     resizeWindow("参数调整", 600, 300);
     
-    // 创建轨迹条（蓝色专用参数）[7](@ref)
+    
     createTrackbar("低蓝H", "参数调整", &lowH, 180, onTrackbar, &img);
     createTrackbar("高蓝H", "参数调整", &highH, 180, onTrackbar, &img);
     createTrackbar("低S", "参数调整", &lowS, 255, onTrackbar, &img);
@@ -186,14 +186,14 @@ int main() {
     createTrackbar("低V", "参数调整", &lowV, 255, onTrackbar, &img);
     createTrackbar("高V", "参数调整", &highV, 255, onTrackbar, &img);
     
-    // 初始处理
+    
     processImage(img);
     
-    // 等待用户调整
+    
     while (true) {
         int key = waitKey(30);
-        if (key == 27) break; // ESC退出
-        if (key == 's') {     // 保存当前参数
+        if (key == 27) break; 
+        if (key == 's') {     
             cout << "保存的参数:" << endl;
             cout << "低蓝H: " << lowH << endl;
             cout << "高蓝H: " << highH << endl;
